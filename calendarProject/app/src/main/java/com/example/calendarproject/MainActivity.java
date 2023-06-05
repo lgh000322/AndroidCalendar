@@ -33,8 +33,10 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Locale;
 
+import okhttp3.FormBody;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class MainActivity extends AppCompatActivity implements OnItemListener {
@@ -75,79 +77,78 @@ public class MainActivity extends AppCompatActivity implements OnItemListener {
         setMonthView(calendar, year, month, lastDate);
 
         //크롤링 구현하기
-        Handler handler = new Handler() {
-            @Override
-            public void handleMessage(@NonNull Message msg) {
-                Bundle bundle = msg.getData();
-                ArrayList<String> contentList = bundle.getStringArrayList("message");
-                String fileName = month + "달의 학사일정";
-                StringBuilder sb = new StringBuilder();
-
-                for (String content : contentList) {
-                    sb.append(content).append("\n");
-                }
-
-                try {
-                    FileOutputStream fileOutputStream = openFileOutput(fileName, Context.MODE_PRIVATE);
-                    fileOutputStream.write(sb.toString().getBytes());
-                    fileOutputStream.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-        };
-
         new Thread() {
             @Override
             public void run() {
                 OkHttpClient client = new OkHttpClient();
 
-                // Request 객체 생성
-                Request request = new Request.Builder()
-                        .url(url)
-                        .build();
+                for (int month = 1; month <= 12; month++) {
+                    // 월별 파일 이름 설정
+                    String fileName = month + "달의 학사일정";
 
-                // HTTP 요청 보내기
-                try (Response response = client.newCall(request).execute()) {
-                    // HTTP 응답 받기
-                    if (response.isSuccessful()) {
-                        String responseBody = response.body().string();
+                    // Request Body 생성
+                    RequestBody requestBody = new FormBody.Builder()
+                            .add("month", String.valueOf(month))
+                            .build();
 
-                        // Jsoup을 사용하여 HTML 파싱하기
-                        Document doc = Jsoup.parse(responseBody);
-                        Elements elements = doc.select(".sche-comt table tr");  // tr 요소 선택
+                    // Request 객체 생성
+                    Request request = new Request.Builder()
+                            .url(url)  // 예시 URL, 실제 URL에 맞게 수정해야 합니다.
+                            .post(requestBody)
+                            .build();
 
-                        ArrayList<String> contentList = new ArrayList<>();
+                    // HTTP 요청 보내기
+                    try (Response response = client.newCall(request).execute()) {
+                        // HTTP 응답 받기
+                        if (response.isSuccessful()) {
+                            String responseBody = response.body().string();
 
-                        for (Element element : elements) {
-                            Elements thElements = element.select("th");  // th 요소 선택
-                            Elements tdElements = element.select("td");  // td 요소 선택
+                            // Jsoup을 사용하여 HTML 파싱하기
+                            Document doc = Jsoup.parse(responseBody);
+                            Elements elements = doc.select(".sche-comt table tr");  // tr 요소 선택
 
-                            StringBuilder contentBuilder = new StringBuilder();
+                            ArrayList<String> contentList = new ArrayList<>();
 
-                            for (Element thElement : thElements) {
-                                String thText = thElement.text();
-                                contentBuilder.append(thText).append(" ");  // th 텍스트 추가
+                            for (Element element : elements) {
+                                Elements thElements = element.select("th");  // th 요소 선택
+                                Elements tdElements = element.select("td");  // td 요소 선택
+
+                                StringBuilder contentBuilder = new StringBuilder();
+
+                                for (Element thElement : thElements) {
+                                    String thText = thElement.text();
+                                    contentBuilder.append(thText).append(" ");  // th 텍스트 추가
+                                }
+
+                                for (Element tdElement : tdElements) {
+                                    String tdText = tdElement.text();
+                                    contentBuilder.append(tdText).append(" ");  // td 텍스트 추가
+                                }
+
+                                contentList.add(contentBuilder.toString().trim());
                             }
 
-                            for (Element tdElement : tdElements) {
-                                String tdText = tdElement.text();
-                                contentBuilder.append(tdText).append(" ");  // td 텍스트 추가
+                            // 파일 저장하기
+                            try {
+                                FileOutputStream fileOutputStream = openFileOutput(fileName, Context.MODE_PRIVATE);
+                                StringBuilder sb = new StringBuilder();
+
+                                for (String content : contentList) {
+                                    sb.append(content).append("\n");
+                                }
+
+                                fileOutputStream.write(sb.toString().getBytes());
+                                fileOutputStream.close();
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
 
-                            contentList.add(contentBuilder.toString().trim());
+                        } else {
+                            Log.e("OkHttp", "HTTP Request Error : " + response.code());
                         }
-
-                        // 메시지 핸들러를 사용하여 UI 업데이트하기
-                        bundle.putStringArrayList("message", contentList);
-                        Message message = handler.obtainMessage();
-                        message.setData(bundle);
-                        handler.sendMessage(message);
-                    } else {
-                        Log.e("OkHttp", "HTTP Request Error : " + response.code());
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                } catch (IOException e) {
-                    e.printStackTrace();
                 }
             }
         }.start();
@@ -193,6 +194,7 @@ public class MainActivity extends AppCompatActivity implements OnItemListener {
                 }
             }
         });
+
         getScheduleBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
